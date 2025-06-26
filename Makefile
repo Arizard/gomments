@@ -1,4 +1,4 @@
-APP_NAME := gomments
+APP_NAME := less-coffee/gomments
 DOCKER_TAG := $(APP_NAME):latest
 DATA_DIR := data
 
