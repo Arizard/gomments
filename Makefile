@@ -1,5 +1,5 @@
-APP_NAME := less-coffee/gomments
-DOCKER_TAG := $(APP_NAME):latest
+APP_NAME := gomments
+DOCKER_TAG := less-coffee/$(APP_NAME):latest
 DATA_DIR := data
 
 .PHONY: build
