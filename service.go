@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -45,7 +46,7 @@ var reNewlines2 = regexp.MustCompile(`\n{2}\n*`)
 func stripConsecutiveWhitespace(s string) string {
 	linesTrimmed := []string{}
 	for line := range strings.Lines(s) {
-		linesTrimmed = append(linesTrimmed, strings.TrimSpace(line))
+		linesTrimmed = append(linesTrimmed, strings.TrimRightFunc(line, unicode.IsSpace))
 	}
 
 	return reNewlines2.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", 2))
