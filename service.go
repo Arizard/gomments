@@ -86,7 +86,7 @@ type SubmitReplyResponse struct {
 
 func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
 	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.ReplyAuthorName), " ")
-	replyBody := strings.TrimSpace(stripConsecutiveWhitespace(req.ReplyBody))
+	replyBody := stripConsecutiveWhitespace(req.ReplyBody)
 	replyArticle := strings.TrimSpace(req.ReplyArticle)
 
 	if replyArticle == "" {
