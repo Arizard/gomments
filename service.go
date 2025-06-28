@@ -48,7 +48,7 @@ func stripConsecutiveWhitespace(s string) string {
 		linesTrimmed = append(linesTrimmed, strings.TrimSpace(line))
 	}
 
-	return reNewlines2.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", n))
+	return reNewlines2.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", 2))
 }
 
 type GetRepliesRequest struct {
