@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +37,17 @@ func getReplySignatureFallback(s string) string {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "gomments-reply-secret-%s", s)))
+}
+
+var reNewlines = regexp.MustCompile(`\n{2}\n*`)
+
+func stripConsecutiveWhitespace(s string, n int) string {
+	linesTrimmed := []string{}
+	for line := range strings.Lines(s) {
+		linesTrimmed = append(linesTrimmed, strings.TrimSpace(line))
+	}
+
+	return reNewlines.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", n))
 }
 
 type GetRepliesRequest struct {
@@ -70,19 +83,23 @@ type SubmitReplyResponse struct {
 }
 
 func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
-	if req.ReplyArticle == "" {
+	replyAuthorName := strings.TrimSpace(req.ReplyAuthorName)
+	replyBody := strings.TrimSpace(stripConsecutiveWhitespace(req.ReplyBody, 2))
+	replyArticle := strings.TrimSpace(req.ReplyArticle)
+
+	if replyArticle == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply article")
 	}
 
-	if req.ReplyBody == "" {
+	if replyBody == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply body")
 	}
 
-	if len(req.ReplyBody) > 500 {
+	if len(replyBody) > 500 {
 		return nil, Errorf(http.StatusBadRequest, "reply body max length 500 characters reached")
 	}
 
-	if len(req.ReplyAuthorName) > 40 {
+	if len(replyAuthorName) > 40 {
 		return nil, Errorf(http.StatusBadRequest, "reply author name max length 40 characters reached")
 	}
 
@@ -100,11 +117,11 @@ func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 	}
 
 	params := insertReplyParams{
-		ReplyArticle:        req.ReplyArticle,
-		ReplyBody:           html.EscapeString(req.ReplyBody),
+		ReplyArticle:        replyArticle,
+		ReplyBody:           html.EscapeString(replyBody),
 		ReplySignature:      getReplySignatureFallback(req.ReplySignatureSecret),
 		ReplyIdempotencyKey: req.ReplyIdempotencyKey,
-		ReplyAuthorName:     html.EscapeString(getAuthorNameFallback(req.ReplyAuthorName)),
+		ReplyAuthorName:     html.EscapeString(getAuthorNameFallback(replyAuthorName)),
 		ReplyCreatedAt:      time.Now(),
 	}
 	replyID := 0
