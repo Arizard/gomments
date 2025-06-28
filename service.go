@@ -39,15 +39,16 @@ func getReplySignatureFallback(s string) string {
 	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "gomments-reply-secret-%s", s)))
 }
 
-var reNewlines = regexp.MustCompile(`\n{2}\n*`)
+var reNewlines1 = regexp.MustCompile("\n{1}\n*")
+var reNewlines2 = regexp.MustCompile(`\n{2}\n*`)
 
-func stripConsecutiveWhitespace(s string, n int) string {
+func stripConsecutiveWhitespace(s string) string {
 	linesTrimmed := []string{}
 	for line := range strings.Lines(s) {
 		linesTrimmed = append(linesTrimmed, strings.TrimSpace(line))
 	}
 
-	return reNewlines.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", n))
+	return reNewlines2.ReplaceAllString(strings.Join(linesTrimmed, "\n"), strings.Repeat("\n", n))
 }
 
 type GetRepliesRequest struct {
@@ -83,8 +84,8 @@ type SubmitReplyResponse struct {
 }
 
 func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
-	replyAuthorName := strings.TrimSpace(req.ReplyAuthorName)
-	replyBody := strings.TrimSpace(stripConsecutiveWhitespace(req.ReplyBody, 2))
+	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.ReplyAuthorName), " ")
+	replyBody := strings.TrimSpace(stripConsecutiveWhitespace(req.ReplyBody))
 	replyArticle := strings.TrimSpace(req.ReplyArticle)
 
 	if replyArticle == "" {
