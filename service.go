@@ -2,8 +2,6 @@ package gomments
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"html"
 	"net/http"
 	"regexp"
@@ -11,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/aquilax/tripcode"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -37,7 +36,7 @@ func getReplySignatureFallback(s string) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "gomments-reply-secret-%s", s)))
+	return tripcode.Tripcode(s) // only first 8 bytes of s are used
 }
 
 var reNewlines1 = regexp.MustCompile("\n{1}\n*")
@@ -103,15 +102,6 @@ func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 
 	if len(replyAuthorName) > 40 {
 		return nil, Errorf(http.StatusBadRequest, "reply author name max length 40 characters reached")
-	}
-
-	if req.ReplySignatureSecret != "" {
-		if len(req.ReplySignatureSecret) < 10 {
-			return nil, Errorf(http.StatusBadRequest, "requires reply secret to be >= 10 characters, or 0")
-		}
-		if len(req.ReplySignatureSecret) > 40 {
-			return nil, Errorf(http.StatusBadRequest, "requires reply secret to be <= 40 characters, or 0")
-		}
 	}
 
 	if _, err := uuid.Parse(req.ReplyIdempotencyKey); err != nil {
