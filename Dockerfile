@@ -15,7 +15,6 @@ WORKDIR /root/
 COPY --from=builder /app/main .
 
 # Copy static assets and templates
-COPY --from=builder /app/static ./static
 COPY --from=builder /app/migrations ./migrations
 
 RUN mkdir -p /root/data
