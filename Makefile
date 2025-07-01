@@ -31,3 +31,10 @@ run-release: build
 		-v $(PWD)/$(DATA_DIR):/root/data \
 		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e GIN_MODE=release \
 		$(DOCKER_TAG)
+
+.PHONY: docker
+docker: build
+	aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 874239376509.dkr.ecr.ap-southeast-2.amazonaws.com
+	docker tag less-coffee/gomments:latest 874239376509.dkr.ecr.ap-southeast-2.amazonaws.com/less-coffee/gomments:latest
+	docker push 874239376509.dkr.ecr.ap-southeast-2.amazonaws.com/less-coffee/gomments:latest
+
