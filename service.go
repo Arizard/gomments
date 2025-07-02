@@ -14,12 +14,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type service struct {
+type Service struct {
 	db *sqlx.DB
 }
 
-func New(db *sqlx.DB) *service {
-	return &service{
+func New(db *sqlx.DB) *Service {
+	return &Service{
 		db: db,
 	}
 }
@@ -56,10 +56,10 @@ type GetRepliesRequest struct {
 }
 
 type GetRepliesResponse struct {
-	Replies Replies
+	Replies Replies `json:"replies"`
 }
 
-func (s *service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, ServiceError) {
+func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, ServiceError) {
 	resp := &GetRepliesResponse{}
 
 	replies, err := getRepliesForArticle(ctx, s.db, req.Article)
@@ -72,21 +72,21 @@ func (s *service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRe
 }
 
 type SubmitReplyRequest struct {
-	ReplyIdempotencyKey  string `json:"reply_idempotency_key"`
-	ReplySignatureSecret string `json:"reply_signature_secret"`
-	ReplyArticle         string
-	ReplyBody            string `json:"reply_body"`
-	ReplyAuthorName      string `json:"reply_author_name"`
+	IdempotencyKey  string `json:"reply_idempotency_key"`
+	SignatureSecret string `json:"reply_signature_secret"`
+	Article         string
+	Body            string `json:"reply_body"`
+	AuthorName      string `json:"reply_author_name"`
 }
 
 type SubmitReplyResponse struct {
-	Reply Reply
+	Reply Reply `json:"reply"`
 }
 
-func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
-	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.ReplyAuthorName), " ")
-	replyBody := stripConsecutiveWhitespace(req.ReplyBody)
-	replyArticle := strings.TrimSpace(req.ReplyArticle)
+func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
+	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
+	replyBody := stripConsecutiveWhitespace(req.Body)
+	replyArticle := strings.TrimSpace(req.Article)
 
 	if replyArticle == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply article")
@@ -104,17 +104,17 @@ func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 		return nil, Errorf(http.StatusBadRequest, "reply author name max length 40 characters reached")
 	}
 
-	if _, err := uuid.Parse(req.ReplyIdempotencyKey); err != nil {
+	if _, err := uuid.Parse(req.IdempotencyKey); err != nil {
 		return nil, Errorf(http.StatusBadRequest, "parsing idempotency key: %w", err)
 	}
 
 	params := insertReplyParams{
-		ReplyArticle:        replyArticle,
-		ReplyBody:           html.EscapeString(replyBody),
-		ReplySignature:      getReplySignatureFallback(req.ReplySignatureSecret),
-		ReplyIdempotencyKey: req.ReplyIdempotencyKey,
-		ReplyAuthorName:     html.EscapeString(getAuthorNameFallback(replyAuthorName)),
-		ReplyCreatedAt:      time.Now(),
+		Article:        replyArticle,
+		Body:           html.EscapeString(replyBody),
+		Signature:      getReplySignatureFallback(req.SignatureSecret),
+		IdempotencyKey: req.IdempotencyKey,
+		AuthorName:     html.EscapeString(getAuthorNameFallback(replyAuthorName)),
+		CreatedAt:      time.Now(),
 	}
 	replyID := 0
 	if id, err := insertReply(
@@ -129,14 +129,51 @@ func (s *service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 
 	return &SubmitReplyResponse{
 		Reply: Reply{
-			ReplyID:             replyID,
-			ReplyIdempotencyKey: params.ReplyIdempotencyKey,
-			ReplySignature:      params.ReplySignature,
-			ReplyArticle:        params.ReplyArticle,
-			ReplyBody:           params.ReplyBody,
-			ReplyDeleted:        params.ReplyDeleted,
-			ReplyCreatedAt:      params.ReplyCreatedAt,
-			ReplyAuthorName:     params.ReplyAuthorName,
+			ID:             replyID,
+			IdempotencyKey: params.IdempotencyKey,
+			Signature:      params.Signature,
+			Article:        params.Article,
+			Body:           params.Body,
+			Deleted:        params.Deleted,
+			CreatedAt:      params.CreatedAt,
+			AuthorName:     params.AuthorName,
 		},
 	}, nil
+}
+
+type GetStatsByArticlesRequest struct {
+	Articles []string
+}
+
+type ArticleStats struct {
+	Count       int       `json:"count"`
+	LastReplyAt time.Time `json:"last_reply_at"`
+}
+
+type GetStatsByArticlesResponse struct {
+	Stats map[string]ArticleStats `json:"stats"`
+}
+
+func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, ServiceError) {
+	aggs, err := getStatsForArticles(ctx, s.db, req.Articles)
+	if err != nil {
+		return nil, Errorf(http.StatusInternalServerError, "getting aggs: %w", err)
+	}
+
+	resp := &GetStatsByArticlesResponse{
+		Stats: map[string]ArticleStats{},
+	}
+
+	for _, article := range req.Articles {
+		resp.Stats[article] = ArticleStats{}
+	}
+
+	for _, agg := range aggs {
+		resp.Stats[agg.Article] = ArticleStats{
+			Count:       agg.Count,
+			LastReplyAt: agg.LastReplyAt,
+		}
+	}
+
+	return resp, nil
 }
