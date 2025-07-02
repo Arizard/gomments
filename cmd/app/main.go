@@ -11,35 +11,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type GommentsEnv struct {
-	Required map[string]string
-	Optional map[string]string
+type gommentsEnv struct {
+	required map[string]string
+	optional map[string]string
 }
 
 func main() {
-	env := GommentsEnv{
-		Required: map[string]string{
+	env := gommentsEnv{
+		required: map[string]string{
 			"PORT": "",
 		},
-		Optional: map[string]string{
+		optional: map[string]string{
 			"BASE_URL": "",
 		},
 	}
 
-	for k := range env.Required {
+	for k := range env.required {
 		v := os.Getenv(k)
 		if v == "" {
 			log.Fatalf("missing env variable: %s", k)
 		}
 
-		env.Required[k] = v
+		env.required[k] = v
 	}
 
-	for k := range env.Optional {
-		env.Optional[k] = os.Getenv(k)
+	for k := range env.optional {
+		env.optional[k] = os.Getenv(k)
 	}
 
-	log.Printf("base url is %q", env.Optional["BASE_URL"])
+	log.Printf("base url is %q", env.optional["BASE_URL"])
 
 	dbx, err := internal.InitSQLiteDatabase("/root/data/gomments.db")
 	if err != nil {
@@ -58,9 +58,9 @@ func main() {
 	corsCfg.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 	router.Use(cors.New(corsCfg))
 
-	internal.InitRoutes(router, svc, internal.InitRoutesOptions{BaseURL: env.Optional["BASE_URL"]})
+	internal.InitRoutes(router, svc, internal.InitRoutesOptions{BaseURL: env.optional["BASE_URL"]})
 
-	if err := router.Run(fmt.Sprintf(":%s", env.Required["PORT"])); err != nil {
+	if err := router.Run(fmt.Sprintf(":%s", env.required["PORT"])); err != nil {
 		log.Fatalln(err.Error())
 		return
 	}
