@@ -9,30 +9,30 @@ import (
 )
 
 type Reply struct {
-	ReplyID             int    `db:"reply_id" json:"reply_id"`
-	ReplyIdempotencyKey string `db:"reply_idempotency_key" json:"reply_idempotency_key"`
-	ReplySignature      string `db:"reply_signature" json:"reply_signature"`
+	ID             int    `db:"reply_id" json:"reply_id"`
+	IdempotencyKey string `db:"reply_idempotency_key" json:"reply_idempotency_key"`
+	Signature      string `db:"reply_signature" json:"reply_signature"`
 
-	ReplyArticle   string    `db:"reply_article" json:"reply_article"`
-	ReplyBody      string    `db:"reply_body" json:"reply_body"`
-	ReplyDeleted   bool      `db:"reply_deleted" json:"reply_deleted"`
-	ReplyCreatedAt time.Time `db:"reply_created_at" json:"reply_created_at"`
+	Article   string    `db:"reply_article" json:"reply_article"`
+	Body      string    `db:"reply_body" json:"reply_body"`
+	Deleted   bool      `db:"reply_deleted" json:"reply_deleted"`
+	CreatedAt time.Time `db:"reply_created_at" json:"reply_created_at"`
 
-	ReplyAuthorName string `db:"reply_author_name" json:"reply_author_name"`
+	AuthorName string `db:"reply_author_name" json:"reply_author_name"`
 }
 
 type Replies []Reply
 
 type insertReplyParams struct {
-	ReplyIdempotencyKey string `db:"reply_idempotency_key"`
-	ReplySignature      string `db:"reply_signature"`
+	IdempotencyKey string `db:"reply_idempotency_key"`
+	Signature      string `db:"reply_signature"`
 
-	ReplyArticle   string    `db:"reply_article"`
-	ReplyBody      string    `db:"reply_body"`
-	ReplyDeleted   bool      `db:"reply_deleted"`
-	ReplyCreatedAt time.Time `db:"reply_created_at"`
+	Article   string    `db:"reply_article"`
+	Body      string    `db:"reply_body"`
+	Deleted   bool      `db:"reply_deleted"`
+	CreatedAt time.Time `db:"reply_created_at"`
 
-	ReplyAuthorName string `db:"reply_author_name"`
+	AuthorName string `db:"reply_author_name"`
 }
 
 func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (int, error) {
@@ -63,18 +63,18 @@ func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (in
 	}
 
 	row := struct {
-		ReplyID int `db:"reply_id"`
+		ID int `db:"reply_id"`
 	}{}
 
 	if err := db.GetContext(ctx, &row, q, args...); err != nil {
 		return 0, fmt.Errorf("selecting and inserting for insertReply: %w", err)
 	}
 
-	if row.ReplyID == 0 {
+	if row.ID == 0 {
 		return 0, fmt.Errorf("unexpected id after insert")
 	}
 
-	return row.ReplyID, nil
+	return row.ID, nil
 }
 
 func getRepliesForArticle(ctx context.Context, db *sqlx.DB, article string) (Replies, error) {
@@ -104,4 +104,60 @@ func getRepliesForArticle(ctx context.Context, db *sqlx.DB, article string) (Rep
 	}
 
 	return result, nil
+}
+
+type ReplyAggregation struct {
+	Article     string
+	Count       int
+	LastReplyAt time.Time
+}
+
+type ReplyAggregations []ReplyAggregation
+
+func getStatsForArticles(ctx context.Context, db *sqlx.DB, articles []string) (ReplyAggregations, error) {
+	results := []struct {
+		Article     string `db:"reply_article"`
+		Count       int    `db:"reply_count"`
+		LastReplyAt string `db:"last_reply_at"`
+	}{}
+
+	query := `
+		SELECT
+			reply_article,
+			COUNT(reply_id) AS reply_count,
+			DATETIME(MAX(reply_created_at)) AS last_reply_at
+		FROM reply
+		WHERE reply_article IN (?) AND reply_deleted = false
+		GROUP BY reply_article
+	`
+
+	query, args, err := sqlx.In(query, articles)
+	if err != nil {
+		return nil, fmt.Errorf("interpolating IN: %w", err)
+	}
+
+	if err := db.SelectContext(
+		ctx,
+		&results,
+		query,
+		args...,
+	); err != nil {
+		return nil, fmt.Errorf("aggregating reply content: %w", err)
+	}
+
+	aggs := ReplyAggregations{}
+
+	for _, result := range results {
+		agg := ReplyAggregation{}
+		agg.Article = result.Article
+		agg.Count = result.Count
+		agg.LastReplyAt, err = time.Parse(time.DateTime, result.LastReplyAt)
+		if err != nil {
+			return nil, fmt.Errorf("parsing time string into time.Time: %w", err)
+		}
+
+		aggs = append(aggs, agg)
+	}
+
+	return aggs, nil
 }
