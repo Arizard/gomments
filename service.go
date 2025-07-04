@@ -100,8 +100,8 @@ func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 		return nil, Errorf(http.StatusBadRequest, "reply body max length 500 characters reached")
 	}
 
-	if len(replyAuthorName) > 40 {
-		return nil, Errorf(http.StatusBadRequest, "reply author name max length 40 characters reached")
+	if len(replyAuthorName) > 24 {
+		return nil, Errorf(http.StatusBadRequest, "reply author name max length 24 characters reached")
 	}
 
 	if _, err := uuid.Parse(req.IdempotencyKey); err != nil {
