@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/arizard/gomments"
@@ -44,6 +45,10 @@ func InitRoutes(router *gin.Engine, svc *gomments.Service, opt InitRoutesOptions
 		}
 
 		req.Article = c.Param("article")
+
+		if len(req.Article) > 1024 {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("article id too long"))
+		}
 
 		ctx := context.Background()
 		resp, err := svc.SubmitReply(
