@@ -8,6 +8,7 @@ import (
 	"github.com/arizard/gomments"
 	"github.com/arizard/gomments/internal"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/contrib/secure"
 	"github.com/gin-gonic/gin"
 )
 
@@ -41,7 +42,7 @@ func main() {
 
 	log.Printf("base url is %q", env.optional["BASE_URL"])
 
-	dbx, err := internal.InitSQLiteDatabase("/root/data/gomments.db")
+	dbx, err := internal.InitSQLiteDatabase("/home/appuser/data/gomments.db")
 	if err != nil {
 		log.Fatalf("getting migrated dbx: %s", err)
 		return
@@ -51,7 +52,18 @@ func main() {
 
 	router := gin.Default()
 
+	// Set request size limits to prevent memory exhaustion attacks
+	router.MaxMultipartMemory = 1 << 20 // 1 MB
+
 	router.SetTrustedProxies(nil)
+
+	// Security headers middleware
+	router.Use(secure.Secure(secure.Options{
+		FrameDeny:             true,
+		ContentTypeNosniff:    true,
+		BrowserXssFilter:      true,
+		ContentSecurityPolicy: "default-src 'self'",
+	}))
 
 	corsCfg := cors.DefaultConfig()
 	corsCfg.AllowOrigins = []string{"http://localhost:1313", "https://less.coffee"}
