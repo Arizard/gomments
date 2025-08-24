@@ -57,6 +57,7 @@ func main() {
 	corsCfg.AllowOrigins = []string{"http://localhost:1313", "https://less.coffee"}
 	corsCfg.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 	router.Use(cors.New(corsCfg))
+	router.Use(internal.NewClientIPRateLimiterMiddleware(10))
 
 	internal.InitRoutes(router, svc, internal.InitRoutesOptions{BaseURL: env.optional["BASE_URL"]})
 
