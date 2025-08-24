@@ -3,6 +3,7 @@ package internal
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/ratelimit"
@@ -11,6 +12,17 @@ import (
 func NewClientIPRateLimiterMiddleware(rps int) gin.HandlerFunc {
 	limiters := map[string]ratelimit.Limiter{}
 	mu := sync.RWMutex{}
+
+	// periodically flush the limiter map
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			<-ticker.C
+			mu.Lock()
+			limiters = map[string]ratelimit.Limiter{}
+			mu.Unlock()
+		}
+	}()
 
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
