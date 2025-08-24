@@ -15,7 +15,7 @@ run: build
 	docker run \
 		--name $(APP_NAME) \
 		-p $(PORT):$(PORT) \
-		-v $(PWD)/$(DATA_DIR):/root/data \
+		-v $(PWD)/$(DATA_DIR):/home/appuser/data \
 		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) \
 		$(DOCKER_TAG)
 
@@ -28,7 +28,7 @@ run-release: build
 	docker run \
 		--name $(APP_NAME) \
 		-p $(PORT):$(PORT) \
-		-v $(PWD)/$(DATA_DIR):/root/data \
+		-v $(PWD)/$(DATA_DIR):/home/appuser/data \
 		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e GIN_MODE=release \
 		$(DOCKER_TAG)
 
