@@ -13,7 +13,13 @@ func NewClientIPRateLimiterMiddleware(rps int) gin.HandlerFunc {
 	mu := sync.RWMutex{}
 
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
+		var ip string
+
+		if fh := c.GetHeader("X-Forwarded-For"); fh != "" {
+			ip = fh
+		} else {
+			ip = c.ClientIP()
+		}
 
 		log.Printf("client ip: %s", ip)
 
