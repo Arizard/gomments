@@ -33,21 +33,22 @@ func main() {
 		port        string
 		baseURL     string
 		allowOrigin string
+		cors        cors.Config
 	}{
 		port:        mustGetEnv("PORT"),
 		baseURL:     os.Getenv("BASE_URL"),
 		allowOrigin: os.Getenv("ALLOW_ORIGIN"),
+		cors:        cors.DefaultConfig(),
 	}
+
+	if settings.allowOrigin != "" {
+		settings.cors.AllowOrigins = []string{settings.allowOrigin, "https://less.coffee"}
+	} else {
+		settings.cors.AllowOrigins = []string{"https://less.coffee"}
+	}
+	settings.cors.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 
 	log.Printf("base url is %q", settings.baseURL)
-
-	corsCfg := cors.DefaultConfig()
-	if settings.allowOrigin != "" {
-		corsCfg.AllowOrigins = []string{settings.allowOrigin, "https://less.coffee"}
-	} else {
-		corsCfg.AllowOrigins = []string{"https://less.coffee"}
-	}
-	corsCfg.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 
 	router := gin.Default()
 	router.MaxMultipartMemory = 1 << 20 // 1 MB
@@ -59,7 +60,7 @@ func main() {
 		BrowserXssFilter:      true,
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
-	router.Use(cors.New(corsCfg))
+	router.Use(cors.New(settings.cors))
 	router.Use(internal.NewClientIPRateLimiterMiddleware(10))
 
 	dbx, err := internal.InitSQLiteDatabase("/home/appuser/data/gomments.db")
