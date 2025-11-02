@@ -9,16 +9,16 @@ import (
 )
 
 type Reply struct {
-	ID             int    `db:"reply_id" json:"reply_id"`
-	IdempotencyKey string `db:"reply_idempotency_key" json:"reply_idempotency_key"`
-	Signature      string `db:"reply_signature" json:"reply_signature"`
+	ID             int    `db:"reply_id" json:"id"`
+	IdempotencyKey string `db:"reply_idempotency_key" json:"idempotency_key"`
+	Signature      string `db:"reply_signature" json:"signature"`
 
-	Article   string    `db:"reply_article" json:"reply_article"`
-	Body      string    `db:"reply_body" json:"reply_body"`
-	Deleted   bool      `db:"reply_deleted" json:"reply_deleted"`
-	CreatedAt time.Time `db:"reply_created_at" json:"reply_created_at"`
+	Article   string    `db:"reply_article" json:"article"`
+	Body      string    `db:"reply_body" json:"body"`
+	Deleted   bool      `db:"reply_deleted" json:"deleted"`
+	CreatedAt time.Time `db:"reply_created_at" json:"created_at"`
 
-	AuthorName string `db:"reply_author_name" json:"reply_author_name"`
+	AuthorName string `db:"reply_author_name" json:"author_name"`
 }
 
 type Replies []Reply

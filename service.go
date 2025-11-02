@@ -72,11 +72,11 @@ func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRe
 }
 
 type SubmitReplyRequest struct {
-	IdempotencyKey  string `json:"reply_idempotency_key"`
-	SignatureSecret string `json:"reply_signature_secret"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	SignatureSecret string `json:"signature_secret"`
 	Article         string
-	Body            string `json:"reply_body"`
-	AuthorName      string `json:"reply_author_name"`
+	Body            string `json:"body"`
+	AuthorName      string `json:"author_name"`
 }
 
 type SubmitReplyResponse struct {
