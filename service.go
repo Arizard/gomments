@@ -84,23 +84,23 @@ type SubmitReplyResponse struct {
 }
 
 func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
-	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
-	replyBody := stripConsecutiveWhitespace(req.Body)
-	replyArticle := strings.TrimSpace(req.Article)
+	authorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
+	body := stripConsecutiveWhitespace(req.Body)
+	article := strings.TrimSpace(req.Article)
 
-	if replyArticle == "" {
+	if article == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply article")
 	}
 
-	if replyBody == "" {
+	if body == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply body")
 	}
 
-	if len(replyBody) > 500 {
+	if len(body) > 500 {
 		return nil, Errorf(http.StatusBadRequest, "reply body max length 500 characters reached")
 	}
 
-	if len(replyAuthorName) > 24 {
+	if len(authorName) > 24 {
 		return nil, Errorf(http.StatusBadRequest, "reply author name max length 24 characters reached")
 	}
 
@@ -109,11 +109,11 @@ func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 	}
 
 	params := insertReplyParams{
-		Article:        replyArticle,
-		Body:           html.EscapeString(replyBody),
+		Article:        article,
+		Body:           html.EscapeString(body),
 		Signature:      getReplySignatureFallback(req.SignatureSecret),
 		IdempotencyKey: req.IdempotencyKey,
-		AuthorName:     html.EscapeString(getAuthorNameFallback(replyAuthorName)),
+		AuthorName:     html.EscapeString(getAuthorNameFallback(authorName)),
 		CreatedAt:      time.Now(),
 	}
 	replyID := 0
