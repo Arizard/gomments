@@ -15,11 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type gommentsEnv struct {
-	required map[string]string
-	optional map[string]string
-}
-
 func mustGetEnv(k string) string {
 	v := os.Getenv(k)
 	if v == "" {
