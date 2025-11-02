@@ -16,7 +16,7 @@ run: build
 		--name $(APP_NAME) \
 		-p $(PORT):$(PORT) \
 		-v $(PWD)/$(DATA_DIR):/home/appuser/data \
-		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) \
+		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e ALLOW_ORIGIN=$(ALLOW_ORIGIN) \
 		$(DOCKER_TAG)
 
 .PHONY: run-release
@@ -29,7 +29,7 @@ run-release: build
 		--name $(APP_NAME) \
 		-p $(PORT):$(PORT) \
 		-v $(PWD)/$(DATA_DIR):/home/appuser/data \
-		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e GIN_MODE=release \
+		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e ALLOW_ORIGIN=$(ALLOW_ORIGIN) GIN_MODE=release \
 		$(DOCKER_TAG)
 
 .PHONY: docker

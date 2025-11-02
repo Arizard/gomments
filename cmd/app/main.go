@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 
+	"context"
+	"net/http"
+
 	"github.com/arizard/gomments"
 	"github.com/arizard/gomments/internal"
 	"github.com/gin-contrib/cors"
@@ -17,63 +20,97 @@ type gommentsEnv struct {
 	optional map[string]string
 }
 
+func mustGetEnv(k string) string {
+	v := os.Getenv(k)
+	if v == "" {
+		log.Fatalf("missing env variable: %s", k)
+	}
+	return v
+}
+
 func main() {
-	env := gommentsEnv{
-		required: map[string]string{
-			"PORT": "",
-		},
-		optional: map[string]string{
-			"BASE_URL": "",
-		},
+	settings := struct {
+		port        string
+		baseURL     string
+		allowOrigin string
+	}{
+		port:        mustGetEnv("PORT"),
+		baseURL:     os.Getenv("BASE_URL"),
+		allowOrigin: os.Getenv("ALLOW_ORIGIN"),
 	}
 
-	for k := range env.required {
-		v := os.Getenv(k)
-		if v == "" {
-			log.Fatalf("missing env variable: %s", k)
-		}
+	log.Printf("base url is %q", settings.baseURL)
 
-		env.required[k] = v
+	corsCfg := cors.DefaultConfig()
+	if settings.allowOrigin != "" {
+		corsCfg.AllowOrigins = []string{settings.allowOrigin, "https://less.coffee"}
+	} else {
+		corsCfg.AllowOrigins = []string{"https://less.coffee"}
 	}
-
-	for k := range env.optional {
-		env.optional[k] = os.Getenv(k)
-	}
-
-	log.Printf("base url is %q", env.optional["BASE_URL"])
-
-	dbx, err := internal.InitSQLiteDatabase("/home/appuser/data/gomments.db")
-	if err != nil {
-		log.Fatalf("getting migrated dbx: %s", err)
-		return
-	}
-
-	svc := gomments.New(dbx)
+	corsCfg.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 
 	router := gin.Default()
-
-	// Set request size limits to prevent memory exhaustion attacks
 	router.MaxMultipartMemory = 1 << 20 // 1 MB
-
 	router.SetTrustedProxies(nil)
 
-	// Security headers middleware
 	router.Use(secure.Secure(secure.Options{
 		FrameDeny:             true,
 		ContentTypeNosniff:    true,
 		BrowserXssFilter:      true,
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
-
-	corsCfg := cors.DefaultConfig()
-	corsCfg.AllowOrigins = []string{"http://localhost:1313", "https://less.coffee"}
-	corsCfg.AllowMethods = []string{"GET", "POST", "OPTIONS"}
 	router.Use(cors.New(corsCfg))
 	router.Use(internal.NewClientIPRateLimiterMiddleware(10))
 
-	internal.InitRoutes(router, svc, internal.InitRoutesOptions{BaseURL: env.optional["BASE_URL"]})
+	dbx, err := internal.InitSQLiteDatabase("/home/appuser/data/gomments.db")
+	if err != nil {
+		log.Fatalf("getting migrated dbx: %s", err)
+		return
+	}
+	svc := gomments.New(dbx)
 
-	if err := router.Run(fmt.Sprintf(":%s", env.required["PORT"])); err != nil {
+	rg := router.Group(settings.baseURL)
+	rg.GET("/ping", func(c *gin.Context) {
+		c.String(http.StatusOK, "pong")
+	})
+
+	rg.GET("/articles/:article/replies", func(c *gin.Context) {
+		resp, err := svc.GetReplies(context.Background(), gomments.GetRepliesRequest{Article: c.Param("article")})
+		if err != nil {
+			c.AbortWithError(err.Status(), err)
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	})
+	rg.POST("/articles/:article/replies", func(c *gin.Context) {
+		var req gomments.SubmitReplyRequest
+		c.BindJSON(&req)
+
+		req.Article = c.Param("article")
+		if len(req.Article) > 1024 {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("article id too long"))
+		}
+		resp, err := svc.SubmitReply(context.Background(), req)
+		if err != nil {
+			c.AbortWithError(err.Status(), err)
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	})
+
+	rg.GET("/articles/replies/stats", func(c *gin.Context) {
+		req := gomments.GetStatsByArticlesRequest{
+			Articles: c.QueryArray("article"),
+		}
+		resp, err := svc.GetStatsByArticles(context.Background(), req)
+		if err != nil {
+			c.AbortWithError(err.Status(), err)
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	})
+
+	if err := router.Run(fmt.Sprintf(":%s", settings.port)); err != nil {
 		log.Fatalln(err.Error())
 		return
 	}
