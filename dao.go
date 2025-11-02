@@ -9,53 +9,53 @@ import (
 )
 
 type Reply struct {
-	ID             int    `db:"reply_id" json:"id"`
-	IdempotencyKey string `db:"reply_idempotency_key" json:"idempotency_key"`
-	Signature      string `db:"reply_signature" json:"signature"`
+	ID             int    `db:"id" json:"id"`
+	IdempotencyKey string `db:"idempotency_key" json:"idempotency_key"`
+	Signature      string `db:"signature" json:"signature"`
 
-	Article   string    `db:"reply_article" json:"article"`
-	Body      string    `db:"reply_body" json:"body"`
-	Deleted   bool      `db:"reply_deleted" json:"deleted"`
-	CreatedAt time.Time `db:"reply_created_at" json:"created_at"`
+	Article   string    `db:"article" json:"article"`
+	Body      string    `db:"body" json:"body"`
+	Deleted   bool      `db:"deleted" json:"deleted"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
 
-	AuthorName string `db:"reply_author_name" json:"author_name"`
+	AuthorName string `db:"author_name" json:"author_name"`
 }
 
 type Replies []Reply
 
 type insertReplyParams struct {
-	IdempotencyKey string `db:"reply_idempotency_key"`
-	Signature      string `db:"reply_signature"`
+	IdempotencyKey string `db:"idempotency_key"`
+	Signature      string `db:"signature"`
 
-	Article   string    `db:"reply_article"`
-	Body      string    `db:"reply_body"`
-	Deleted   bool      `db:"reply_deleted"`
-	CreatedAt time.Time `db:"reply_created_at"`
+	Article   string    `db:"article"`
+	Body      string    `db:"body"`
+	Deleted   bool      `db:"deleted"`
+	CreatedAt time.Time `db:"created_at"`
 
-	AuthorName string `db:"reply_author_name"`
+	AuthorName string `db:"author_name"`
 }
 
 func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (int, error) {
 	query := `
        INSERT INTO reply (
-				   reply_idempotency_key,
-				   reply_signature,
-				   reply_article,
-				   reply_body,
-				   reply_deleted,
-				   reply_created_at,
-				   reply_author_name
+				   idempotency_key,
+				   signature,
+				   article,
+				   body,
+				   deleted,
+				   created_at,
+				   author_name
        ) VALUES (
-           :reply_idempotency_key,
-           :reply_signature,
-           :reply_article,
-           :reply_body,
-           :reply_deleted,
-           :reply_created_at,
-           :reply_author_name
-       ) ON CONFLICT (reply_idempotency_key) DO UPDATE SET
-				   reply_idempotency_key = excluded.reply_idempotency_key
-			 RETURNING reply_id`
+           :idempotency_key,
+           :signature,
+           :article,
+           :body,
+           :deleted,
+           :created_at,
+           :author_name
+       ) ON CONFLICT (idempotency_key) DO UPDATE SET
+				   idempotency_key = excluded.idempotency_key
+			 RETURNING id`
 
 	q, args, err := db.BindNamed(query, params)
 	if err != nil {
@@ -63,7 +63,7 @@ func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (in
 	}
 
 	row := struct {
-		ID int `db:"reply_id"`
+		ID int `db:"id"`
 	}{}
 
 	if err := db.GetContext(ctx, &row, q, args...); err != nil {
@@ -85,17 +85,17 @@ func getRepliesForArticle(ctx context.Context, db *sqlx.DB, article string) (Rep
 		&result,
 		`
 		SELECT
-			 reply_id,
-			 reply_idempotency_key,
-			 reply_signature,
-			 reply_article,
-			 reply_body,
-			 reply_deleted,
-			 reply_created_at,
-			 reply_author_name
+			 id,
+			 idempotency_key,
+			 signature,
+			 article,
+			 body,
+			 deleted,
+			 created_at,
+			 author_name
 		FROM reply
-		WHERE reply_article = ? AND reply_deleted == false
-		ORDER BY reply_created_at DESC
+		WHERE article = ? AND deleted == false
+		ORDER BY created_at DESC
 		`,
 		article,
 	)
@@ -116,19 +116,19 @@ type ReplyAggregations []ReplyAggregation
 
 func getStatsForArticles(ctx context.Context, db *sqlx.DB, articles []string) (ReplyAggregations, error) {
 	results := []struct {
-		Article     string `db:"reply_article"`
-		Count       int    `db:"reply_count"`
-		LastReplyAt string `db:"last_reply_at"`
+		Article     string `db:"article"`
+		Count       int    `db:"count"`
+		LastReplyAt string `db:"last_at"`
 	}{}
 
 	query := `
 		SELECT
-			reply_article,
-			COUNT(reply_id) AS reply_count,
-			DATETIME(MAX(reply_created_at)) AS last_reply_at
+			article,
+			COUNT(id) AS count,
+			DATETIME(MAX(created_at)) AS last_at
 		FROM reply
-		WHERE reply_article IN (?) AND reply_deleted = false
-		GROUP BY reply_article
+		WHERE article IN (?) AND deleted = false
+		GROUP BY article
 	`
 
 	query, args, err := sqlx.In(query, articles)

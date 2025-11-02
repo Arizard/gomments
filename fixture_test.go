@@ -42,38 +42,38 @@ func newFixture(t *testing.T) fixture {
 }
 
 type insertReplyParams struct {
-	IdempotencyKey string `db:"reply_idempotency_key"`
-	Signature      string `db:"reply_signature"`
+	IdempotencyKey string `db:"idempotency_key"`
+	Signature      string `db:"signature"`
 
-	Article   string    `db:"reply_article"`
-	Body      string    `db:"reply_body"`
-	Deleted   bool      `db:"reply_deleted"`
-	CreatedAt time.Time `db:"reply_created_at"`
+	Article   string    `db:"article"`
+	Body      string    `db:"body"`
+	Deleted   bool      `db:"deleted"`
+	CreatedAt time.Time `db:"created_at"`
 
-	AuthorName string `db:"reply_author_name"`
+	AuthorName string `db:"author_name"`
 }
 
 func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (int, error) {
 	query := `
        INSERT INTO reply (
-				   reply_idempotency_key,
-				   reply_signature,
-				   reply_article,
-				   reply_body,
-				   reply_deleted,
-				   reply_created_at,
-				   reply_author_name
+				   idempotency_key,
+				   signature,
+				   article,
+				   body,
+				   deleted,
+				   created_at,
+				   author_name
        ) VALUES (
-           :reply_idempotency_key,
-           :reply_signature,
-           :reply_article,
-           :reply_body,
-           :reply_deleted,
-           :reply_created_at,
-           :reply_author_name
-       ) ON CONFLICT (reply_idempotency_key) DO UPDATE SET
-				   reply_idempotency_key = excluded.reply_idempotency_key
-			 RETURNING reply_id`
+           :idempotency_key,
+           :signature,
+           :article,
+           :body,
+           :deleted,
+           :created_at,
+           :author_name
+       ) ON CONFLICT (idempotency_key) DO UPDATE SET
+				   idempotency_key = excluded.idempotency_key
+			 RETURNING id`
 
 	q, args, err := db.BindNamed(query, params)
 	if err != nil {
@@ -81,7 +81,7 @@ func insertReply(ctx context.Context, db *sqlx.DB, params insertReplyParams) (in
 	}
 
 	row := struct {
-		ID int `db:"reply_id"`
+		ID int `db:"id"`
 	}{}
 
 	if err := db.GetContext(ctx, &row, q, args...); err != nil {
