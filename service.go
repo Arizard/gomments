@@ -2,10 +2,14 @@ package gomments
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"html"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -15,13 +19,76 @@ import (
 )
 
 type Service struct {
-	db *sqlx.DB
+	db       *sqlx.DB
+	sessions sync.Map
 }
 
-func New(db *sqlx.DB) *Service {
-	return &Service{
+func New(ctx context.Context, db *sqlx.DB) *Service {
+	s := &Service{
 		db: db,
 	}
+
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				expired := []uuid.UUID{}
+				s.sessions.Range(func(k, v any) bool {
+					session := v.(AnonymousSession)
+
+					if session.CreatedAt.Before(time.Now().Add(-60 * time.Minute)) {
+						id := k.(uuid.UUID)
+						expired = append(expired, id)
+					}
+
+					return true
+				})
+				if len(expired) == 0 {
+					break
+				}
+				log.Printf("cleaning up %d expired sessions", len(expired))
+				for _, id := range expired {
+					s.sessions.Delete(id)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return s
+}
+
+type AnonymousSession struct {
+	ID        uuid.UUID
+	Token     string
+	CreatedAt time.Time
+}
+
+type CreateSessionResponse struct {
+	SessionID    string `json:"session_id"`
+	SessionToken string `json:"session_token"`
+}
+
+func (s *Service) CreateSession(ctx context.Context) (*CreateSessionResponse, error) {
+	id := uuid.New()
+
+	b := make([]byte, 9)
+	if _, err := rand.Read(b); err != nil {
+		return nil, Errorf(http.StatusInternalServerError, "generating session token: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(b)
+
+	v, _ := s.sessions.LoadOrStore(id, AnonymousSession{ID: id, Token: token, CreatedAt: time.Now()})
+	session := v.(AnonymousSession)
+
+	response := CreateSessionResponse{
+		SessionID:    session.ID.String(),
+		SessionToken: session.Token,
+	}
+
+	return &response, nil
 }
 
 func getAuthorNameFallback(s string) string {

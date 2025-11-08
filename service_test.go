@@ -294,3 +294,17 @@ func TestService_GetStatsByArticles(t *testing.T) {
 		})
 	}
 }
+
+func TestService_CreateSession(t *testing.T) {
+	t.Run("generates ID and token", func(tt *testing.T) {
+		ctx := context.Background()
+		f := newFixture(tt)
+		s := f.service
+
+		resp, err := s.CreateSession(ctx)
+
+		f.NoError(err)
+		f.NotEmpty(resp.SessionID)
+		f.NotEmpty(resp.SessionToken)
+	})
+}

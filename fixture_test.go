@@ -22,6 +22,7 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) fixture {
+	ctx := context.Background()
 	t.Parallel()
 
 	dbPath := fmt.Sprintf("./data/gomments_test_%s.db", uuid.NewString())
@@ -37,7 +38,7 @@ func newFixture(t *testing.T) fixture {
 	return fixture{
 		require.New(t),
 		dbx,
-		gomments.New(dbx),
+		gomments.New(ctx, dbx),
 	}
 }
 
