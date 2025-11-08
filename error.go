@@ -2,28 +2,23 @@ package gomments
 
 import "fmt"
 
-type ServiceError interface {
-	error
-	Status() int
-}
-
-type serviceError struct {
+type ServiceError struct {
 	status int
 	err    error
 }
 
-func (e serviceError) Error() string {
+func (e ServiceError) Error() string {
 	return e.err.Error()
 }
 
-func (e serviceError) Status() int {
+func (e ServiceError) Status() int {
 	return e.status
 }
 
-func Error(c int, e error) serviceError {
-	return serviceError{status: c, err: e}
+func Error(c int, e error) ServiceError {
+	return ServiceError{status: c, err: e}
 }
 
-func Errorf(c int, s string, args ...any) serviceError {
-	return serviceError{status: c, err: fmt.Errorf(s, args...)}
+func Errorf(c int, s string, args ...any) ServiceError {
+	return ServiceError{status: c, err: fmt.Errorf(s, args...)}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -73,7 +74,12 @@ func main() {
 	rg.GET("/articles/:article/replies", func(c *gin.Context) {
 		resp, err := svc.GetReplies(context.Background(), gomments.GetRepliesRequest{Article: c.Param("article")})
 		if err != nil {
-			c.AbortWithError(err.Status(), err)
+			var gsErr *gomments.ServiceError
+			if errors.As(err, &gsErr) {
+				c.AbortWithError(gsErr.Status(), err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 		c.JSON(http.StatusOK, resp)
@@ -88,7 +94,12 @@ func main() {
 		}
 		resp, err := svc.SubmitReply(context.Background(), req)
 		if err != nil {
-			c.AbortWithError(err.Status(), err)
+			var gsErr *gomments.ServiceError
+			if errors.As(err, &gsErr) {
+				c.AbortWithError(gsErr.Status(), err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 		c.JSON(http.StatusOK, resp)
@@ -100,7 +111,12 @@ func main() {
 		}
 		resp, err := svc.GetStatsByArticles(context.Background(), req)
 		if err != nil {
-			c.AbortWithError(err.Status(), err)
+			var gsErr *gomments.ServiceError
+			if errors.As(err, &gsErr) {
+				c.AbortWithError(gsErr.Status(), err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 		c.JSON(http.StatusOK, resp)

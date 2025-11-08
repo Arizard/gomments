@@ -94,7 +94,7 @@ func TestService_GetReplies(t *testing.T) {
 		name string // description of this test case
 		req  gomments.GetRepliesRequest
 		want *gomments.GetRepliesResponse
-		err  gomments.ServiceError
+		err  error
 	}{
 		{
 			name: "gets_replies",
@@ -242,7 +242,7 @@ func TestService_GetStatsByArticles(t *testing.T) {
 		name string // description of this test case
 		req  gomments.GetStatsByArticlesRequest
 		want *gomments.GetStatsByArticlesResponse
-		err  gomments.ServiceError
+		err  error
 	}{
 		{
 			name: "gets_stats_article",

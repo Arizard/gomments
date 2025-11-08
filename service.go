@@ -59,7 +59,7 @@ type GetRepliesResponse struct {
 	Replies Replies `json:"replies"`
 }
 
-func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, ServiceError) {
+func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, error) {
 	resp := &GetRepliesResponse{}
 
 	replies, err := getRepliesForArticle(ctx, s.db, req.Article)
@@ -83,7 +83,7 @@ type SubmitReplyResponse struct {
 	Reply Reply `json:"reply"`
 }
 
-func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
+func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, error) {
 	authorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
 	body := stripConsecutiveWhitespace(req.Body)
 	article := strings.TrimSpace(req.Article)
@@ -154,7 +154,7 @@ type GetStatsByArticlesResponse struct {
 	Stats map[string]ArticleStats `json:"stats"`
 }
 
-func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, ServiceError) {
+func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, error) {
 	aggs, err := getStatsForArticles(ctx, s.db, req.Articles)
 	if err != nil {
 		return nil, Errorf(http.StatusInternalServerError, "getting aggs: %w", err)
