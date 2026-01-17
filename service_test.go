@@ -94,7 +94,7 @@ func TestService_GetReplies(t *testing.T) {
 		name string // description of this test case
 		req  gomments.GetRepliesRequest
 		want *gomments.GetRepliesResponse
-		err  gomments.ServiceError
+		err  error
 	}{
 		{
 			name: "gets_replies",
@@ -242,7 +242,7 @@ func TestService_GetStatsByArticles(t *testing.T) {
 		name string // description of this test case
 		req  gomments.GetStatsByArticlesRequest
 		want *gomments.GetStatsByArticlesResponse
-		err  gomments.ServiceError
+		err  error
 	}{
 		{
 			name: "gets_stats_article",
@@ -293,4 +293,18 @@ func TestService_GetStatsByArticles(t *testing.T) {
 			f.EqualExportedValues(tc.want, got)
 		})
 	}
+}
+
+func TestService_CreateSession(t *testing.T) {
+	t.Run("generates ID and token", func(tt *testing.T) {
+		ctx := context.Background()
+		f := newFixture(tt)
+		s := f.service
+
+		resp, err := s.CreateSession(ctx)
+
+		f.NoError(err)
+		f.NotEmpty(resp.SessionID)
+		f.NotEmpty(resp.SessionToken)
+	})
 }

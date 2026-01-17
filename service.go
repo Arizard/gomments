@@ -2,10 +2,14 @@ package gomments
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"html"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -15,13 +19,76 @@ import (
 )
 
 type Service struct {
-	db *sqlx.DB
+	db       *sqlx.DB
+	sessions sync.Map
 }
 
-func New(db *sqlx.DB) *Service {
-	return &Service{
+func New(ctx context.Context, db *sqlx.DB) *Service {
+	s := &Service{
 		db: db,
 	}
+
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				expired := []uuid.UUID{}
+				s.sessions.Range(func(k, v any) bool {
+					session := v.(AnonymousSession)
+
+					if session.CreatedAt.Before(time.Now().Add(-60 * time.Minute)) {
+						id := k.(uuid.UUID)
+						expired = append(expired, id)
+					}
+
+					return true
+				})
+				if len(expired) == 0 {
+					break
+				}
+				log.Printf("cleaning up %d expired sessions", len(expired))
+				for _, id := range expired {
+					s.sessions.Delete(id)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return s
+}
+
+type AnonymousSession struct {
+	ID        uuid.UUID
+	Token     string
+	CreatedAt time.Time
+}
+
+type CreateSessionResponse struct {
+	SessionID    string `json:"session_id"`
+	SessionToken string `json:"session_token"`
+}
+
+func (s *Service) CreateSession(ctx context.Context) (*CreateSessionResponse, error) {
+	id := uuid.New()
+
+	b := make([]byte, 9)
+	if _, err := rand.Read(b); err != nil {
+		return nil, Errorf(http.StatusInternalServerError, "generating session token: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(b)
+
+	v, _ := s.sessions.LoadOrStore(id, AnonymousSession{ID: id, Token: token, CreatedAt: time.Now()})
+	session := v.(AnonymousSession)
+
+	response := CreateSessionResponse{
+		SessionID:    session.ID.String(),
+		SessionToken: session.Token,
+	}
+
+	return &response, nil
 }
 
 func getAuthorNameFallback(s string) string {
@@ -59,7 +126,7 @@ type GetRepliesResponse struct {
 	Replies Replies `json:"replies"`
 }
 
-func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, ServiceError) {
+func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRepliesResponse, error) {
 	resp := &GetRepliesResponse{}
 
 	replies, err := getRepliesForArticle(ctx, s.db, req.Article)
@@ -72,35 +139,35 @@ func (s *Service) GetReplies(ctx context.Context, req GetRepliesRequest) (*GetRe
 }
 
 type SubmitReplyRequest struct {
-	IdempotencyKey  string `json:"reply_idempotency_key"`
-	SignatureSecret string `json:"reply_signature_secret"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	SignatureSecret string `json:"signature_secret"`
 	Article         string
-	Body            string `json:"reply_body"`
-	AuthorName      string `json:"reply_author_name"`
+	Body            string `json:"body"`
+	AuthorName      string `json:"author_name"`
 }
 
 type SubmitReplyResponse struct {
 	Reply Reply `json:"reply"`
 }
 
-func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, ServiceError) {
-	replyAuthorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
-	replyBody := stripConsecutiveWhitespace(req.Body)
-	replyArticle := strings.TrimSpace(req.Article)
+func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*SubmitReplyResponse, error) {
+	authorName := reNewlines1.ReplaceAllString(strings.TrimSpace(req.AuthorName), " ")
+	body := stripConsecutiveWhitespace(req.Body)
+	article := strings.TrimSpace(req.Article)
 
-	if replyArticle == "" {
+	if article == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply article")
 	}
 
-	if replyBody == "" {
+	if body == "" {
 		return nil, Errorf(http.StatusBadRequest, "requires reply body")
 	}
 
-	if len(replyBody) > 500 {
+	if len(body) > 500 {
 		return nil, Errorf(http.StatusBadRequest, "reply body max length 500 characters reached")
 	}
 
-	if len(replyAuthorName) > 24 {
+	if len(authorName) > 24 {
 		return nil, Errorf(http.StatusBadRequest, "reply author name max length 24 characters reached")
 	}
 
@@ -109,11 +176,11 @@ func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 	}
 
 	params := insertReplyParams{
-		Article:        replyArticle,
-		Body:           html.EscapeString(replyBody),
+		Article:        article,
+		Body:           html.EscapeString(body),
 		Signature:      getReplySignatureFallback(req.SignatureSecret),
 		IdempotencyKey: req.IdempotencyKey,
-		AuthorName:     html.EscapeString(getAuthorNameFallback(replyAuthorName)),
+		AuthorName:     html.EscapeString(getAuthorNameFallback(authorName)),
 		CreatedAt:      time.Now(),
 	}
 	replyID := 0
@@ -154,7 +221,7 @@ type GetStatsByArticlesResponse struct {
 	Stats map[string]ArticleStats `json:"stats"`
 }
 
-func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, ServiceError) {
+func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, error) {
 	aggs, err := getStatsForArticles(ctx, s.db, req.Articles)
 	if err != nil {
 		return nil, Errorf(http.StatusInternalServerError, "getting aggs: %w", err)
