@@ -2,7 +2,6 @@ package gomments
 
 import (
 	"context"
-	"html"
 	"net/http"
 	"regexp"
 	"slices"
@@ -115,10 +114,10 @@ func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 
 	params := insertReplyParams{
 		Article:        article,
-		Body:           html.EscapeString(body),
+		Body:           body,
 		Signature:      getReplySignatureFallback(req.SignatureSecret),
 		IdempotencyKey: req.IdempotencyKey,
-		AuthorName:     html.EscapeString(getAuthorNameFallback(authorName)),
+		AuthorName:     getAuthorNameFallback(authorName),
 		CreatedAt:      time.Now(),
 	}
 	replyID := 0
