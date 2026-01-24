@@ -114,7 +114,7 @@ type ReplyAggregation struct {
 
 type ReplyAggregations []ReplyAggregation
 
-func getStatsForArticles(ctx context.Context, db *sqlx.DB, articles []string) (ReplyAggregations, error) {
+func getReplyStatsByArticles(ctx context.Context, db *sqlx.DB, articles []string) (ReplyAggregations, error) {
 	results := []struct {
 		Article     string `db:"article"`
 		Count       int    `db:"count"`
@@ -160,4 +160,89 @@ func getStatsForArticles(ctx context.Context, db *sqlx.DB, articles []string) (R
 	}
 
 	return aggs, nil
+}
+
+func insertReaction(ctx context.Context, db *sqlx.DB, article string, kind string, deletionKey string) error {
+	if _, err := db.ExecContext(
+		ctx,
+		`
+			insert into article_reaction (article, kind, deletion_key)
+			values ($1, $2, $3)
+		`,
+		article,
+		kind,
+		deletionKey,
+	); err != nil {
+		return fmt.Errorf("inserting reaction: %w", err)
+	}
+
+	result := struct {
+		Count int `db:"count"`
+	}{}
+
+	if err := db.GetContext(
+		ctx,
+		&result,
+		`
+		select count(*) as count from article_reaction where article = $1 and kind = $2 and not deleted
+		`,
+		article,
+		kind,
+	); err != nil {
+		return fmt.Errorf("getting reactions: %w", err)
+	}
+
+	return nil
+}
+
+func deleteReactionByDeletionKey(ctx context.Context, db *sqlx.DB, deletionKey string) error {
+	if _, err := db.ExecContext(
+		ctx,
+		`
+			update article_reaction
+			set deleted = true
+			where deletion_key = $1
+		`,
+		deletionKey,
+	); err != nil {
+		return fmt.Errorf("inserting reaction: %w", err)
+	}
+
+	return nil
+}
+
+type ReactionAggregation struct {
+	Article string `db:"article"`
+	Count   int    `db:"count"`
+	Kind    string `db:"kind"`
+}
+
+func getReactionStatsByArticles(ctx context.Context, db *sqlx.DB, articles []string) ([]ReactionAggregation, error) {
+	results := []ReactionAggregation{}
+
+	query := `
+		SELECT
+			article,
+			kind,
+			COUNT(*) AS count
+		FROM article_reaction
+		WHERE article IN (?) AND deleted = false
+		GROUP BY article, kind
+	`
+
+	query, args, err := sqlx.In(query, articles)
+	if err != nil {
+		return nil, fmt.Errorf("interpolating IN: %w", err)
+	}
+
+	if err := db.SelectContext(
+		ctx,
+		&results,
+		query,
+		args...,
+	); err != nil {
+		return nil, fmt.Errorf("aggregating reply content: %w", err)
+	}
+
+	return results, nil
 }

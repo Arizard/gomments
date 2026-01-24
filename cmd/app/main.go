@@ -108,10 +108,10 @@ func main() {
 	})
 
 	rg.GET("/articles/replies/stats", func(c *gin.Context) {
-		req := gomments.GetStatsByArticlesRequest{
+		req := gomments.GetReplyStatsByArticlesRequest{
 			Articles: c.QueryArray("article"),
 		}
-		resp, err := svc.GetStatsByArticles(ctx, req)
+		resp, err := svc.GetReplyStatsByArticles(ctx, req)
 		if err != nil {
 			var gsErr *gomments.ServiceError
 			if errors.As(err, &gsErr) {
@@ -124,8 +124,44 @@ func main() {
 		c.JSON(http.StatusOK, resp)
 	})
 
-	rg.POST("/sessions", func(c *gin.Context) {
-		resp, err := svc.CreateSession(ctx)
+	rg.POST("/articles/:article/reactions/THUMBS_UP", func(c *gin.Context) {
+		resp, err := svc.CreateReaction(ctx, gomments.CreateReactionRequest{
+			Kind:    "THUMBS_UP",
+			Article: c.Param("article"),
+		})
+		if err != nil {
+			var gsErr *gomments.ServiceError
+			if errors.As(err, &gsErr) {
+				c.AbortWithError(gsErr.Status(), err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	})
+
+	rg.DELETE("/reactions", func(c *gin.Context) {
+		resp, err := svc.DeleteReaction(ctx, gomments.DeleteReactionRequest{
+			DeletionKey: c.Query("key"),
+		})
+		if err != nil {
+			var gsErr *gomments.ServiceError
+			if errors.As(err, &gsErr) {
+				c.AbortWithError(gsErr.Status(), err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	})
+
+	rg.GET("/articles/reactions/stats", func(c *gin.Context) {
+		req := gomments.GetReactionStatsByArticlesRequest{
+			Articles: c.QueryArray("article"),
+		}
+		resp, err := svc.GetReactionStatsByArticles(ctx, req)
 		if err != nil {
 			var gsErr *gomments.ServiceError
 			if errors.As(err, &gsErr) {

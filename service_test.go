@@ -240,17 +240,17 @@ func TestService_GetStatsByArticles(t *testing.T) {
 
 	tests := []struct {
 		name string // description of this test case
-		req  gomments.GetStatsByArticlesRequest
-		want *gomments.GetStatsByArticlesResponse
+		req  gomments.GetReplyStatsByArticlesRequest
+		want *gomments.GetReplyStatsByArticlesResponse
 		err  error
 	}{
 		{
 			name: "gets_stats_article",
-			req: gomments.GetStatsByArticlesRequest{
+			req: gomments.GetReplyStatsByArticlesRequest{
 				Articles: []string{articles[0], articles[1], "non-existing-article"},
 			},
-			want: &gomments.GetStatsByArticlesResponse{
-				Stats: map[string]gomments.ArticleStats{
+			want: &gomments.GetReplyStatsByArticlesResponse{
+				Stats: map[string]gomments.ArticleReplyStats{
 					articles[0]: {
 						Count:       5,
 						LastReplyAt: now,
@@ -284,7 +284,7 @@ func TestService_GetStatsByArticles(t *testing.T) {
 				f.NoError(err)
 			}
 
-			got, err := s.GetStatsByArticles(ctx, tc.req)
+			got, err := s.GetReplyStatsByArticles(ctx, tc.req)
 			if tc.err == nil {
 				f.NoError(err)
 			} else {
@@ -295,16 +295,33 @@ func TestService_GetStatsByArticles(t *testing.T) {
 	}
 }
 
-func TestService_CreateSession(t *testing.T) {
-	t.Run("generates ID and token", func(tt *testing.T) {
+func TestService_CreateReaction(t *testing.T) {
+	t.Run("creates reactions", func(tt *testing.T) {
 		ctx := context.Background()
 		f := newFixture(tt)
 		s := f.service
 
-		resp, err := s.CreateSession(ctx)
-
+		resp, err := s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
 		f.NoError(err)
-		f.NotEmpty(resp.SessionID)
-		f.NotEmpty(resp.SessionToken)
+		f.NotEmpty(resp.DeletionKey)
+
+		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
+		f.NoError(err)
+		f.NotEmpty(resp.DeletionKey)
+
+		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
+		f.NoError(err)
+		f.NotEmpty(resp.DeletionKey)
+
+		deleteResp, err := s.DeleteReaction(ctx, gomments.DeleteReactionRequest{DeletionKey: resp.DeletionKey})
+		f.NotNil(deleteResp)
+		f.NoError(err)
+
+		_, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_DOWN"})
+		f.NotNil(err)
+
+		statsResp, err := s.GetReactionStatsByArticles(ctx, gomments.GetReactionStatsByArticlesRequest{Articles: []string{"test-article"}})
+		f.NoError(err)
+		f.Equal(2, statsResp.Stats["test-article"]["THUMBS_UP"])
 	})
 }

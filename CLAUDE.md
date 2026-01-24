@@ -31,7 +31,7 @@ Gomments is a simple commenting system for the personal website less.coffee. It'
 - `cmd/app/main.go` - Application entry point with environment setup and server initialization
 - `service.go` - Core business logic service layer with comment operations
 - `dao.go` - Database access layer with SQLite queries
-- `internal/router.go` - HTTP route definitions and handlers
+- `internal/limiter.go` - Rate limiting middleware
 - `internal/database.go` - Database initialization and migration setup
 - `error.go` - Custom error handling types
 
@@ -52,10 +52,7 @@ Gomments is a simple commenting system for the personal website less.coffee. It'
 - `GIN_MODE` (optional) - Set to "release" for production
 
 ### API Endpoints
-- `GET /ping` - Health check
-- `GET /articles/:article/replies` - Get comments for an article
-- `POST /articles/:article/replies` - Submit new comment
-- `GET /articles/replies/stats` - Get comment statistics for multiple articles
+See [API.md](API.md) for the full list of endpoints.
 
 ### Testing
 - Uses testify/require for assertions

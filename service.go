@@ -2,12 +2,10 @@ package gomments
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"html"
-	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -28,67 +26,7 @@ func New(ctx context.Context, db *sqlx.DB) *Service {
 		db: db,
 	}
 
-	ticker := time.NewTicker(1 * time.Minute)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				expired := []uuid.UUID{}
-				s.sessions.Range(func(k, v any) bool {
-					session := v.(AnonymousSession)
-
-					if session.CreatedAt.Before(time.Now().Add(-60 * time.Minute)) {
-						id := k.(uuid.UUID)
-						expired = append(expired, id)
-					}
-
-					return true
-				})
-				if len(expired) == 0 {
-					break
-				}
-				log.Printf("cleaning up %d expired sessions", len(expired))
-				for _, id := range expired {
-					s.sessions.Delete(id)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	return s
-}
-
-type AnonymousSession struct {
-	ID        uuid.UUID
-	Token     string
-	CreatedAt time.Time
-}
-
-type CreateSessionResponse struct {
-	SessionID    string `json:"session_id"`
-	SessionToken string `json:"session_token"`
-}
-
-func (s *Service) CreateSession(ctx context.Context) (*CreateSessionResponse, error) {
-	id := uuid.New()
-
-	b := make([]byte, 9)
-	if _, err := rand.Read(b); err != nil {
-		return nil, Errorf(http.StatusInternalServerError, "generating session token: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(b)
-
-	v, _ := s.sessions.LoadOrStore(id, AnonymousSession{ID: id, Token: token, CreatedAt: time.Now()})
-	session := v.(AnonymousSession)
-
-	response := CreateSessionResponse{
-		SessionID:    session.ID.String(),
-		SessionToken: session.Token,
-	}
-
-	return &response, nil
 }
 
 func getAuthorNameFallback(s string) string {
@@ -208,38 +146,111 @@ func (s *Service) SubmitReply(ctx context.Context, req SubmitReplyRequest) (*Sub
 	}, nil
 }
 
-type GetStatsByArticlesRequest struct {
+type GetReplyStatsByArticlesRequest struct {
 	Articles []string
 }
 
-type ArticleStats struct {
+type ArticleReplyStats struct {
 	Count       int       `json:"count"`
 	LastReplyAt time.Time `json:"last_reply_at"`
 }
 
-type GetStatsByArticlesResponse struct {
-	Stats map[string]ArticleStats `json:"stats"`
+type GetReplyStatsByArticlesResponse struct {
+	Stats map[string]ArticleReplyStats `json:"stats"`
 }
 
-func (s *Service) GetStatsByArticles(ctx context.Context, req GetStatsByArticlesRequest) (*GetStatsByArticlesResponse, error) {
-	aggs, err := getStatsForArticles(ctx, s.db, req.Articles)
+func (s *Service) GetReplyStatsByArticles(ctx context.Context, req GetReplyStatsByArticlesRequest) (*GetReplyStatsByArticlesResponse, error) {
+	aggs, err := getReplyStatsByArticles(ctx, s.db, req.Articles)
 	if err != nil {
 		return nil, Errorf(http.StatusInternalServerError, "getting aggs: %w", err)
 	}
 
-	resp := &GetStatsByArticlesResponse{
-		Stats: map[string]ArticleStats{},
+	resp := &GetReplyStatsByArticlesResponse{
+		Stats: map[string]ArticleReplyStats{},
 	}
 
 	for _, article := range req.Articles {
-		resp.Stats[article] = ArticleStats{}
+		resp.Stats[article] = ArticleReplyStats{}
 	}
 
 	for _, agg := range aggs {
-		resp.Stats[agg.Article] = ArticleStats{
+		resp.Stats[agg.Article] = ArticleReplyStats{
 			Count:       agg.Count,
 			LastReplyAt: agg.LastReplyAt,
 		}
+	}
+
+	return resp, nil
+}
+
+var ValidReactionKinds []string = []string{"THUMBS_UP"}
+
+type CreateReactionRequest struct {
+	Kind    string
+	Article string
+}
+
+type CreateReactionResponse struct {
+	DeletionKey string `json:"deletion_key"`
+}
+
+func (s *Service) CreateReaction(ctx context.Context, req CreateReactionRequest) (*CreateReactionResponse, error) {
+	if !slices.Contains(ValidReactionKinds, req.Kind) {
+		return nil, Errorf(400, "not a valid kind: %q", req.Kind)
+	}
+	deletionKey := uuid.New().String()
+	err := insertReaction(ctx, s.db, req.Article, req.Kind, deletionKey)
+	if err != nil {
+		return nil, Errorf(500, "creating reaction: %w", err)
+	}
+
+	return &CreateReactionResponse{DeletionKey: deletionKey}, nil
+}
+
+type DeleteReactionRequest struct {
+	DeletionKey string
+}
+
+type DeleteReactionResponse struct {
+}
+
+func (s *Service) DeleteReaction(ctx context.Context, req DeleteReactionRequest) (*DeleteReactionResponse, error) {
+	err := deleteReactionByDeletionKey(ctx, s.db, req.DeletionKey)
+	if err != nil {
+		return nil, Errorf(500, "deleting reaction: %w", err)
+	}
+
+	return &DeleteReactionResponse{}, nil
+}
+
+type GetReactionStatsByArticlesRequest struct {
+	Articles []string
+}
+
+type ArticleReactionStats map[string]int
+type GetReactionStatsByArticlesResponse struct {
+	Stats map[string]ArticleReactionStats `json:"stats"`
+}
+
+func (s *Service) GetReactionStatsByArticles(ctx context.Context, req GetReactionStatsByArticlesRequest) (*GetReactionStatsByArticlesResponse, error) {
+	aggs, err := getReactionStatsByArticles(ctx, s.db, req.Articles)
+	if err != nil {
+		return nil, Errorf(500, "aggregating reactions: %w", err)
+	}
+
+	resp := &GetReactionStatsByArticlesResponse{
+		Stats: map[string]ArticleReactionStats{},
+	}
+
+	for _, article := range req.Articles {
+		resp.Stats[article] = ArticleReactionStats{}
+		for _, kind := range ValidReactionKinds {
+			resp.Stats[article][kind] = 0
+		}
+	}
+
+	for _, agg := range aggs {
+		resp.Stats[agg.Article][agg.Kind] = agg.Count
 	}
 
 	return resp, nil
