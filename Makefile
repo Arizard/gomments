@@ -3,6 +3,7 @@ DOCKER_TAG := less-coffee/$(APP_NAME):latest
 DATA_DIR := data
 PORT := 8080
 BASE_URL := "/gomments"
+ALLOW_ORIGIN := "http://localhost:1313"
 
 .PHONY: build
 build:

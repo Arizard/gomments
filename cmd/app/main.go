@@ -42,7 +42,7 @@ func main() {
 	} else {
 		settings.cors.AllowOrigins = []string{"https://less.coffee"}
 	}
-	settings.cors.AllowMethods = []string{"GET", "POST", "OPTIONS"}
+	settings.cors.AllowMethods = []string{"GET", "POST", "DELETE", "OPTIONS"}
 
 	log.Printf("base url is %q", settings.baseURL)
 
