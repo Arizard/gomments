@@ -124,9 +124,9 @@ func main() {
 		c.JSON(http.StatusOK, resp)
 	})
 
-	rg.POST("/articles/:article/reactions/THUMBS_UP", func(c *gin.Context) {
+	rg.POST("/articles/:article/reactions/:kind", func(c *gin.Context) {
 		resp, err := svc.CreateReaction(ctx, gomments.CreateReactionRequest{
-			Kind:    "THUMBS_UP",
+			Kind:    c.Param("kind"),
 			Article: c.Param("article"),
 		})
 		if err != nil {

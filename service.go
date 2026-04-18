@@ -182,7 +182,7 @@ func (s *Service) GetReplyStatsByArticles(ctx context.Context, req GetReplyStats
 	return resp, nil
 }
 
-var ValidReactionKinds []string = []string{"THUMBS_UP"}
+var allowedReactionKinds []string = []string{"like"}
 
 type CreateReactionRequest struct {
 	Kind    string
@@ -194,7 +194,7 @@ type CreateReactionResponse struct {
 }
 
 func (s *Service) CreateReaction(ctx context.Context, req CreateReactionRequest) (*CreateReactionResponse, error) {
-	if !slices.Contains(ValidReactionKinds, req.Kind) {
+	if !slices.Contains(allowedReactionKinds, req.Kind) {
 		return nil, Errorf(400, "not a valid kind: %q", req.Kind)
 	}
 	deletionKey := uuid.New().String()
@@ -243,12 +243,15 @@ func (s *Service) GetReactionStatsByArticles(ctx context.Context, req GetReactio
 
 	for _, article := range req.Articles {
 		resp.Stats[article] = ArticleReactionStats{}
-		for _, kind := range ValidReactionKinds {
+		for _, kind := range allowedReactionKinds {
 			resp.Stats[article][kind] = 0
 		}
 	}
 
 	for _, agg := range aggs {
+		if _, ok := resp.Stats[agg.Article][agg.Kind]; !ok {
+			continue
+		}
 		resp.Stats[agg.Article][agg.Kind] = agg.Count
 	}
 

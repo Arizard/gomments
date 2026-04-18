@@ -301,15 +301,15 @@ func TestService_CreateReaction(t *testing.T) {
 		f := newFixture(tt)
 		s := f.service
 
-		resp, err := s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
+		resp, err := s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "like"})
 		f.NoError(err)
 		f.NotEmpty(resp.DeletionKey)
 
-		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
+		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "like"})
 		f.NoError(err)
 		f.NotEmpty(resp.DeletionKey)
 
-		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_UP"})
+		resp, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "like"})
 		f.NoError(err)
 		f.NotEmpty(resp.DeletionKey)
 
@@ -317,11 +317,11 @@ func TestService_CreateReaction(t *testing.T) {
 		f.NotNil(deleteResp)
 		f.NoError(err)
 
-		_, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "THUMBS_DOWN"})
+		_, err = s.CreateReaction(ctx, gomments.CreateReactionRequest{Article: "test-article", Kind: "non-existent-reaction"})
 		f.NotNil(err)
 
 		statsResp, err := s.GetReactionStatsByArticles(ctx, gomments.GetReactionStatsByArticlesRequest{Articles: []string{"test-article"}})
 		f.NoError(err)
-		f.Equal(2, statsResp.Stats["test-article"]["THUMBS_UP"])
+		f.Equal(2, statsResp.Stats["test-article"]["like"])
 	})
 }

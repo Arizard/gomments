@@ -1,6 +1,8 @@
 APP_NAME := gomments
 DOCKER_TAG := less-coffee/$(APP_NAME):latest
 DATA_DIR := data
+PORT := 8080
+BASE_URL := "/gomments"
 
 .PHONY: build
 build:
