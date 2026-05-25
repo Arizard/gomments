@@ -1,19 +1,18 @@
 package main
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"strings"
 
 	"context"
 	"net/http"
 
 	"github.com/arizard/gomments"
 	"github.com/arizard/gomments/internal"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/contrib/secure"
-	"github.com/gin-gonic/gin"
 )
 
 func mustGetEnv(k string) string {
@@ -24,158 +23,150 @@ func mustGetEnv(k string) string {
 	return v
 }
 
+func jsonResponse(w http.ResponseWriter, resp any) {
+	b, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "%s", b)
+}
+
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	settings := struct {
 		port        string
 		baseURL     string
 		allowOrigin string
-		cors        cors.Config
+		// cors        cors.Config
 	}{
 		port:        mustGetEnv("PORT"),
 		baseURL:     os.Getenv("BASE_URL"),
 		allowOrigin: os.Getenv("ALLOW_ORIGIN"),
-		cors:        cors.DefaultConfig(),
+		// cors:        cors.DefaultConfig(),
 	}
-
-	if settings.allowOrigin != "" {
-		settings.cors.AllowOrigins = []string{settings.allowOrigin, "https://less.coffee"}
-	} else {
-		settings.cors.AllowOrigins = []string{"https://less.coffee"}
-	}
-	settings.cors.AllowMethods = []string{"GET", "POST", "DELETE", "OPTIONS"}
 
 	log.Printf("base url is %q", settings.baseURL)
 
-	router := gin.Default()
-	router.MaxMultipartMemory = 1 << 20 // 1 MB
-	router.SetTrustedProxies(nil)
-
-	router.Use(secure.Secure(secure.Options{
-		FrameDeny:             true,
-		ContentTypeNosniff:    true,
-		BrowserXssFilter:      true,
-		ContentSecurityPolicy: "default-src 'self'",
-	}))
-	router.Use(cors.New(settings.cors))
-	router.Use(internal.NewClientIPRateLimiterMiddleware(10))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	dbx, err := internal.InitSQLiteDatabase("/home/appuser/data/gomments.db")
 	if err != nil {
 		log.Fatalf("getting migrated dbx: %s", err)
 		return
 	}
+
 	svc := gomments.New(ctx, dbx)
 
-	rg := router.Group(settings.baseURL)
-	rg.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, "pong")
+	svcMux := http.NewServeMux()
+	svcMux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "pong")
 	})
-
-	rg.GET("/articles/:article/replies", func(c *gin.Context) {
-		resp, err := svc.GetReplies(ctx, gomments.GetRepliesRequest{Article: c.Param("article")})
-		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
+	svcMux.HandleFunc("GET /articles/{article}/replies", func(w http.ResponseWriter, r *http.Request) {
+		article := r.PathValue("article")
+		if article == "" {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		c.JSON(http.StatusOK, resp)
-	})
-	rg.POST("/articles/:article/replies", func(c *gin.Context) {
-		var req gomments.SubmitReplyRequest
-		c.BindJSON(&req)
 
-		req.Article = c.Param("article")
-		if len(req.Article) > 1024 {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("article id too long"))
+		resp, err := svc.GetReplies(ctx, gomments.GetRepliesRequest{Article: article})
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
 		}
+
+		jsonResponse(w, resp)
+	})
+	svcMux.HandleFunc("POST /articles/{article}/replies", func(w http.ResponseWriter, r *http.Request) {
+		var req gomments.SubmitReplyRequest
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			fmt.Fprint(w, "could not read body")
+			return
+		}
+
+		if err := json.Unmarshal(b, &req); err != nil {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			fmt.Fprint(w, "could not unmarshal json")
+			return
+		}
+
+		req.Article = r.PathValue("article")
+
 		resp, err := svc.SubmitReply(ctx, req)
 		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		c.JSON(http.StatusOK, resp)
-	})
 
-	rg.GET("/articles/replies/stats", func(c *gin.Context) {
+		jsonResponse(w, resp)
+	})
+	svcMux.HandleFunc("GET /articles/replies/stats", func(w http.ResponseWriter, r *http.Request) {
 		req := gomments.GetReplyStatsByArticlesRequest{
-			Articles: c.QueryArray("article"),
+			Articles: r.URL.Query()["article"],
 		}
 		resp, err := svc.GetReplyStatsByArticles(ctx, req)
 		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		c.JSON(http.StatusOK, resp)
+		jsonResponse(w, resp)
 	})
-
-	rg.POST("/articles/:article/reactions/:kind", func(c *gin.Context) {
-		resp, err := svc.CreateReaction(ctx, gomments.CreateReactionRequest{
-			Kind:    c.Param("kind"),
-			Article: c.Param("article"),
-		})
-		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
-			return
-		}
-		c.JSON(http.StatusOK, resp)
-	})
-
-	rg.DELETE("/reactions", func(c *gin.Context) {
-		resp, err := svc.DeleteReaction(ctx, gomments.DeleteReactionRequest{
-			DeletionKey: c.Query("key"),
-		})
-		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
-			return
-		}
-		c.JSON(http.StatusOK, resp)
-	})
-
-	rg.GET("/articles/reactions/stats", func(c *gin.Context) {
+	svcMux.HandleFunc("GET /articles/reactions/stats", func(w http.ResponseWriter, r *http.Request) {
 		req := gomments.GetReactionStatsByArticlesRequest{
-			Articles: c.QueryArray("article"),
+			Articles: r.URL.Query()["article"],
 		}
 		resp, err := svc.GetReactionStatsByArticles(ctx, req)
 		if err != nil {
-			var gsErr *gomments.ServiceError
-			if errors.As(err, &gsErr) {
-				c.AbortWithError(gsErr.Status(), err)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		c.JSON(http.StatusOK, resp)
+		jsonResponse(w, resp)
+	})
+	svcMux.HandleFunc("POST /articles/{article}/reactions/{kind}", func(w http.ResponseWriter, r *http.Request) {
+		article := r.PathValue("article")
+		kind := r.PathValue("kind")
+
+		resp, err := svc.CreateReaction(ctx, gomments.CreateReactionRequest{
+			Kind:    kind,
+			Article: article,
+		})
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		jsonResponse(w, resp)
+	})
+	svcMux.HandleFunc("DELETE /reactions", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := svc.DeleteReaction(ctx, gomments.DeleteReactionRequest{
+			DeletionKey: r.URL.Query().Get("key"),
+		})
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		jsonResponse(w, resp)
 	})
 
-	if err := router.Run(fmt.Sprintf(":%s", settings.port)); err != nil {
-		log.Fatalln(err.Error())
-		return
+	rootMux := http.NewServeMux()
+	strippedMux := http.StripPrefix(settings.baseURL, svcMux)
+	rootMux.HandleFunc(fmt.Sprintf("%s/", settings.baseURL), func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", strings.Join([]string{settings.allowOrigin}, ","))
+		h.Set("Access-Control-Allow-Methods", "OPTIONS, HEAD, GET, POST, DELETE")
+		h.Set("Access-Control-Allow-Headers", "*")
+		switch r.Method {
+		case "OPTIONS": // If this is behind nginx, should cors logic be implemented there instead? Makes it more annoying for dev testing though.
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			h.Set("Content-Type", "application/json")
+			strippedMux.ServeHTTP(w, r)
+		}
+	})
+
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", settings.port), rootMux); err != nil {
+		log.Fatal(err)
 	}
 }

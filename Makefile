@@ -22,6 +22,11 @@ run: build
 		-e BASE_URL=$(BASE_URL) -e PORT=$(PORT) -e ALLOW_ORIGIN=$(ALLOW_ORIGIN) \
 		$(DOCKER_TAG)
 
+.PHONY: local
+local:
+	go vet ./cmd/app/main.go
+	BASE_URL="/gomments" PORT=8080 ALLOW_ORIGIN="localhost" $(MAKE) run
+
 .PHONY: run-release
 run-release: build
 	@mkdir -p $(DATA_DIR)
