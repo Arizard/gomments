@@ -10,6 +10,7 @@ import (
 
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/arizard/gomments"
 	"github.com/arizard/gomments/internal"
@@ -44,10 +45,17 @@ func main() {
 		// cors        cors.Config
 	}{
 		port:        mustGetEnv("PORT"),
-		baseURL:     os.Getenv("BASE_URL"),
 		allowOrigin: os.Getenv("ALLOW_ORIGIN"),
 		// cors:        cors.DefaultConfig(),
 	}
+
+	baseURL, err := url.JoinPath(os.Getenv("BASE_URL"), "/")
+	if err != nil {
+		log.Fatalf("parsing base URL: %s", err)
+		return
+	}
+
+	settings.baseURL = baseURL
 
 	log.Printf("base url is %q", settings.baseURL)
 
@@ -151,10 +159,12 @@ func main() {
 	})
 
 	rootMux := http.NewServeMux()
-	strippedMux := http.StripPrefix(settings.baseURL, svcMux)
-	rootMux.HandleFunc(fmt.Sprintf("%s/", settings.baseURL), func(w http.ResponseWriter, r *http.Request) {
+	strippedMux := http.StripPrefix(strings.TrimSuffix(settings.baseURL, "/"), svcMux)
+	rootMux.HandleFunc(settings.baseURL, func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", strings.Join([]string{settings.allowOrigin}, ","))
+		if settings.allowOrigin != "" {
+			h.Set("Access-Control-Allow-Origin", strings.Join([]string{settings.allowOrigin}, ","))
+		}
 		h.Set("Access-Control-Allow-Methods", "OPTIONS, HEAD, GET, POST, DELETE")
 		h.Set("Access-Control-Allow-Headers", "*")
 		switch r.Method {
@@ -164,6 +174,8 @@ func main() {
 			h.Set("Content-Type", "application/json")
 			strippedMux.ServeHTTP(w, r)
 		}
+
+		log.Printf("%s %s", r.Method, r.URL.Path)
 	})
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", settings.port), rootMux); err != nil {
